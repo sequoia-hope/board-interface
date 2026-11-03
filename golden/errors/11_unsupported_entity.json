@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "board": "round_sensor",
+  "revision": "sha256:3e74fcbaa25453aee16b256cafc50254722c7f8c17e157c3090133db85d29369",
+  "parent": null,
+  "author": {
+    "app": "waffle",
+    "source": "0123456789abcdef0123456789abcdef01234567",
+    "at": "2026-11-03T12:00:00Z"
+  },
+  "driver": "waffle",
+  "last_handover": null,
+  "thickness_mm": 1.6,
+  "geometry_hash": "sha256:3e74fcbaa25453aee16b256cafc50254722c7f8c17e157c3090133db85d29369",
+  "approximate": false
+}

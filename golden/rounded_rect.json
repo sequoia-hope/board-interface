@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "board": "rounded_carrier",
+  "revision": "sha256:017c745a3d6cb0f5550a5505ae64a32cf4d211e05515ab5791b2d689c1c55d70",
+  "parent": null,
+  "author": {
+    "app": "composer",
+    "source": "0123456789abcdef0123456789abcdef01234567",
+    "at": "2026-11-03T12:00:00Z"
+  },
+  "driver": "composer",
+  "last_handover": null,
+  "thickness_mm": 1.6,
+  "geometry_hash": "sha256:017c745a3d6cb0f5550a5505ae64a32cf4d211e05515ab5791b2d689c1c55d70",
+  "approximate": false
+}

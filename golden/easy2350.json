@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "board": "easy2350",
+  "revision": "sha256:d46bc4bcff1ed485d79e6a47a8a521c1c193ee21a64e6d6ec811e0dd253a0088",
+  "parent": null,
+  "author": {
+    "app": "kicad",
+    "source": "56d2bd8fcb94ff5f1137e66a203efa30dc7c91e4",
+    "at": "2026-11-02T23:58:12Z"
+  },
+  "driver": "kicad",
+  "last_handover": null,
+  "thickness_mm": 1.6,
+  "geometry_hash": "sha256:d46bc4bcff1ed485d79e6a47a8a521c1c193ee21a64e6d6ec811e0dd253a0088",
+  "approximate": false
+}
