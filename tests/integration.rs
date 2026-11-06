@@ -456,6 +456,257 @@ fn revision_commits_to_every_field_it_names_and_nothing_else() {
 }
 
 #[test]
+fn compare_ignores_author_provenance_for_competing_take_overs() {
+    let easy_dxf = std::fs::read(golden_dir().join("easy2350.dxf")).unwrap();
+    let easy_json = std::fs::read(golden_dir().join("easy2350.json")).unwrap();
+    let r0 = read(&easy_dxf, &easy_json).unwrap(); // driver = Kicad
+
+    let base = build_zero_edit_handover(&r0, Driver::Waffle);
+
+    // Two Composer take-over records from `r0`, identical in geometry, driver, parent and
+    // last_handover (so `seal()` gives them the exact same revision), differing only in `author`.
+    let mut composer_a = r0.clone();
+    composer_a.holes.push(Hole {
+        id: Some("composer:h1".to_string()),
+        center: Point::new(110 * NM_PER_MM, 120 * NM_PER_MM),
+        diameter_nm: 3_000_000,
+        plated: true,
+        clearance_nm: 200_000,
+    });
+    composer_a.manifest.parent = Some(r0.manifest.revision.clone());
+    composer_a.manifest.driver = Driver::Composer;
+    composer_a.manifest.last_handover = Some(Handover {
+        by: Driver::Composer,
+        at: "2026-11-05T14:00:00Z".to_string(),
+        from_revision: r0.manifest.revision.clone(),
+    });
+    composer_a.manifest.author = Author {
+        app: Driver::Composer,
+        source: "commit-aaaa".to_string(),
+        at: "2026-11-05T14:00:00Z".to_string(),
+    };
+
+    let mut composer_b = composer_a.clone();
+    composer_b.manifest.author = Author {
+        app: Driver::Composer,
+        source: "commit-bbbb".to_string(),
+        at: "2026-11-05T14:00:09Z".to_string(),
+    };
+
+    seal(&mut composer_a);
+    seal(&mut composer_b);
+    assert_eq!(
+        composer_a.manifest.geometry_hash,
+        composer_b.manifest.geometry_hash
+    );
+    assert_eq!(composer_a.manifest.revision, composer_b.manifest.revision);
+
+    assert_eq!(
+        compare(&base, &composer_a).classification,
+        Classification::CompetingTakeOvers
+    );
+    assert_eq!(
+        compare(&base, &composer_b).classification,
+        Classification::CompetingTakeOvers
+    );
+    assert_eq!(
+        compare(&composer_a, &base).classification,
+        Classification::CompetingTakeOvers
+    );
+    assert_eq!(
+        compare(&composer_b, &base).classification,
+        Classification::CompetingTakeOvers
+    );
+}
+
+#[test]
+fn compare_ignores_author_provenance_for_stale_take_over() {
+    let r0 = build_rounded_rect(); // driver = Composer
+    let r1 = build_zero_edit_handover(&r0, Driver::Waffle); // last_handover.at = 2026-11-05T12:00:00Z
+
+    // Composer unlocks from `r1` without having seen Waffle's next publish `r2`.
+    let base_stale_taker = build_zero_edit_handover(&r1, Driver::Composer);
+
+    // Waffle continued driving on `r1` -> `r2`. `waffle_r2_a` and `waffle_r2_b` are identical in
+    // geometry, driver, parent and last_handover, differing only in `author` (`waffle_r2_b` happens
+    // to carry `author.at == last_handover.at`).
+    let mut waffle_r2_a = r1.clone();
+    waffle_r2_a.holes[0].center.x += NM_PER_MM;
+    waffle_r2_a.manifest.parent = Some(r1.manifest.revision.clone());
+    waffle_r2_a.manifest.author = Author {
+        app: Driver::Waffle,
+        source: "waffle-src-1".to_string(),
+        at: "2026-11-05T12:05:00Z".to_string(),
+    };
+
+    let mut waffle_r2_b = waffle_r2_a.clone();
+    waffle_r2_b.manifest.author = Author {
+        app: Driver::Waffle,
+        source: "waffle-src-2".to_string(),
+        at: "2026-11-05T12:00:00Z".to_string(),
+    };
+
+    seal(&mut waffle_r2_a);
+    seal(&mut waffle_r2_b);
+    assert_eq!(
+        waffle_r2_a.manifest.geometry_hash,
+        waffle_r2_b.manifest.geometry_hash
+    );
+    assert_eq!(waffle_r2_a.manifest.revision, waffle_r2_b.manifest.revision);
+
+    assert_eq!(
+        compare(&base_stale_taker, &waffle_r2_a).classification,
+        Classification::StaleTakeOver
+    );
+    assert_eq!(
+        compare(&base_stale_taker, &waffle_r2_b).classification,
+        Classification::StaleTakeOver
+    );
+    assert_eq!(
+        compare(&waffle_r2_a, &base_stale_taker).classification,
+        Classification::StaleTakeOver
+    );
+    assert_eq!(
+        compare(&waffle_r2_b, &base_stale_taker).classification,
+        Classification::StaleTakeOver
+    );
+
+    // Also vary `author` on the stale take-over record itself against the same driver base.
+    let mut taker_a = base_stale_taker.clone();
+    taker_a.manifest.author = Author {
+        app: Driver::Composer,
+        source: "composer-src-1".to_string(),
+        at: "2026-11-05T12:00:00Z".to_string(),
+    };
+    let mut taker_b = taker_a.clone();
+    taker_b.manifest.author = Author {
+        app: Driver::Composer,
+        source: "composer-src-2".to_string(),
+        at: "2026-11-05T12:10:00Z".to_string(),
+    };
+    seal(&mut taker_a);
+    seal(&mut taker_b);
+    assert_eq!(taker_a.manifest.revision, taker_b.manifest.revision);
+    assert_eq!(
+        compare(&waffle_r2_a, &taker_a).classification,
+        Classification::StaleTakeOver
+    );
+    assert_eq!(
+        compare(&waffle_r2_a, &taker_b).classification,
+        Classification::StaleTakeOver
+    );
+}
+
+#[test]
+fn take_over_with_edits_in_same_publish_is_still_a_handover_step() {
+    let easy_dxf = std::fs::read(golden_dir().join("easy2350.dxf")).unwrap();
+    let easy_json = std::fs::read(golden_dir().join("easy2350.json")).unwrap();
+    let r0 = read(&easy_dxf, &easy_json).unwrap(); // driver = Kicad
+
+    // Waffle takes over from `r0` AND modifies geometry + thickness in the same publish, with a
+    // commit timestamp later than `last_handover.at`.
+    let mut edited_take_waffle = r0.clone();
+    edited_take_waffle.manifest.thickness_mm = 2.0;
+    edited_take_waffle.holes.push(Hole {
+        id: Some("waffle:mh1".to_string()),
+        center: Point::new(108 * NM_PER_MM, 112 * NM_PER_MM),
+        diameter_nm: 2_500_000,
+        plated: false,
+        clearance_nm: 250_000,
+    });
+    edited_take_waffle.manifest.parent = Some(r0.manifest.revision.clone());
+    edited_take_waffle.manifest.driver = Driver::Waffle;
+    edited_take_waffle.manifest.last_handover = Some(Handover {
+        by: Driver::Waffle,
+        at: "2026-11-05T16:00:00Z".to_string(),
+        from_revision: r0.manifest.revision.clone(),
+    });
+    edited_take_waffle.manifest.author = Author {
+        app: Driver::Waffle,
+        source: "waffle-edited-takeover".to_string(),
+        at: "2026-11-05T16:00:30Z".to_string(),
+    };
+    seal(&mut edited_take_waffle);
+
+    assert_ne!(
+        edited_take_waffle.manifest.geometry_hash,
+        r0.manifest.geometry_hash
+    );
+    assert_eq!(
+        compare(&r0, &edited_take_waffle).classification,
+        Classification::CleanHandover
+    );
+
+    // Paired with another take over from the same `r0`, both are handover steps -> CompetingTakeOvers.
+    let take_composer = build_zero_edit_handover(&r0, Driver::Composer);
+    assert_eq!(
+        compare(&take_composer, &edited_take_waffle).classification,
+        Classification::CompetingTakeOvers
+    );
+    assert_eq!(
+        compare(&edited_take_waffle, &take_composer).classification,
+        Classification::CompetingTakeOvers
+    );
+
+    // Paired with the original driver continuing on `r0`, only `edited_take_waffle` is a handover
+    // step -> StaleTakeOver.
+    let mut r1_kicad = r0.clone();
+    r1_kicad.manifest.parent = Some(r0.manifest.revision.clone());
+    r1_kicad.manifest.thickness_mm = 1.2;
+    seal(&mut r1_kicad);
+    assert_eq!(
+        compare(&r1_kicad, &edited_take_waffle).classification,
+        Classification::StaleTakeOver
+    );
+    assert_eq!(
+        compare(&edited_take_waffle, &r1_kicad).classification,
+        Classification::StaleTakeOver
+    );
+}
+
+#[test]
+fn first_edit_after_take_over_is_not_a_handover_step() {
+    let r0 = build_rounded_rect(); // driver = Composer
+
+    // Check after both a zero-edit take over and an edited take over.
+    let mut edited_r1 = build_zero_edit_handover(&r0, Driver::Waffle);
+    edited_r1.holes[0].center.x += NM_PER_MM;
+    seal(&mut edited_r1);
+
+    for r1 in [build_zero_edit_handover(&r0, Driver::Waffle), edited_r1] {
+        // Waffle's first edit after taking over: `parent` advances to `r1.revision`, while
+        // `last_handover.from_revision` stays `r0.revision` (even if `author.at` still matches
+        // `last_handover.at`).
+        let mut r2 = r1.clone();
+        r2.holes[0].center.y += NM_PER_MM;
+        r2.manifest.parent = Some(r1.manifest.revision.clone());
+        seal(&mut r2);
+
+        assert_eq!(
+            compare(&r1, &r2).classification,
+            Classification::UpdatedByDriver
+        );
+        assert_eq!(
+            compare(&r0, &r2).classification,
+            Classification::CleanHandover
+        );
+
+        // If Composer unlocks from `r1` without having seen `r2`, `take_back` and `r2` share
+        // `parent == Some(r1.revision)`. Because `r2` is NOT a handover step, this is StaleTakeOver,
+        // never CompetingTakeOvers.
+        let take_back = build_zero_edit_handover(&r1, Driver::Composer);
+        assert_eq!(
+            compare(&r2, &take_back).classification,
+            Classification::StaleTakeOver
+        );
+        assert_eq!(
+            compare(&take_back, &r2).classification,
+            Classification::StaleTakeOver
+        );
+    }
+}
+
+#[test]
 fn golden_error_files_cover_every_typed_error_variant() {
     let base_round = build_round_board();
     let (valid_dxf, valid_json) = write(&base_round);

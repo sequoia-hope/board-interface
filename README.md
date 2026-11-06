@@ -76,7 +76,9 @@ extended data leaves IDs as `None` (welding loop corners within `100 nm`), and c
 - `compare(base, theirs)` reports per-ID `Added`, `Removed`, `Moved { dx_nm, dy_nm }` and `Changed`
   items (or geometrically re-matches stripped files and flags ambiguous candidates in `uncertain`),
   and classifies handover state into `InSync`, `UpdatedByDriver`, `TheirsBehind`, `CleanHandover`,
-  `StaleTakeOver`, `CompetingTakeOvers` or `ChangedOutsideSuite`.
+  `StaleTakeOver`, `CompetingTakeOvers` or `ChangedOutsideSuite`. The classification reads only
+  fields the revision covers, never `author`, so two files with the same revision always classify
+  alike (since `0.2.1`). A take over is the publish whose `parent` is `last_handover.from_revision`.
 
 ## Checks
 

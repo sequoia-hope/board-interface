@@ -276,11 +276,13 @@ fn classify(base: &Record, theirs: &Record) -> Classification {
     Classification::UpdatedByDriver
 }
 
+// `author` is provenance and is not hashed into `revision`, so classification must not read it:
+// a take-over publish is the one whose `parent` is the revision it took the drive from.
 fn is_handover_step(m: &Manifest) -> bool {
     m.parent.is_some()
-        && m.last_handover
-            .as_ref()
-            .is_some_and(|h| h.by == m.driver && h.at == m.author.at)
+        && m.last_handover.as_ref().is_some_and(|h| {
+            h.by == m.driver && m.parent.as_deref() == Some(h.from_revision.as_str())
+        })
 }
 
 fn all_items_have_ids(record: &Record) -> bool {
