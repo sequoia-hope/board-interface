@@ -707,6 +707,35 @@ fn first_edit_after_take_over_is_not_a_handover_step() {
 }
 
 #[test]
+fn taker_that_published_since_sees_the_old_driver_behind() {
+    // Waffle takes the drive from Composer's `r0`, then publishes twice more. Compared from Waffle's
+    // side, Composer's `r0` is simply behind at every step, never a stale take over (0.2.1 said
+    // StaleTakeOver once Waffle had published after taking over). From Composer's side it is a
+    // clean handover throughout.
+    let r0 = build_rounded_rect(); // driver = Composer
+    let t = build_zero_edit_handover(&r0, Driver::Waffle);
+    let mut e1 = t.clone();
+    e1.holes[0].center.x += NM_PER_MM;
+    e1.manifest.parent = Some(t.manifest.revision.clone());
+    seal(&mut e1);
+    let mut e2 = e1.clone();
+    e2.holes[0].center.y += NM_PER_MM;
+    e2.manifest.parent = Some(e1.manifest.revision.clone());
+    seal(&mut e2);
+
+    for mine in [&t, &e1, &e2] {
+        assert_eq!(
+            compare(mine, &r0).classification,
+            Classification::TheirsBehind
+        );
+        assert_eq!(
+            compare(&r0, mine).classification,
+            Classification::CleanHandover
+        );
+    }
+}
+
+#[test]
 fn golden_error_files_cover_every_typed_error_variant() {
     let base_round = build_round_board();
     let (valid_dxf, valid_json) = write(&base_round);

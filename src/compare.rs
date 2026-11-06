@@ -21,7 +21,9 @@ pub enum Classification {
     InSync,
     /// `theirs` was published by the same driver at a newer revision.
     UpdatedByDriver,
-    /// `base` was published directly on top of `theirs` (`base.parent == Some(theirs.revision)`).
+    /// `base` was published directly on top of `theirs` (`base.parent == Some(theirs.revision)`), or
+    /// `base`'s driver took the drive from `theirs` (`base.last_handover.from_revision ==
+    /// theirs.revision`) and may have published since.
     TheirsBehind,
     /// Valid drive handover: `theirs.driver != base.driver` and `theirs.parent` equals
     /// `base.revision` (the previous driver's latest revision).
@@ -244,8 +246,13 @@ fn classify(base: &Record, theirs: &Record) -> Classification {
         return Classification::InSync;
     }
 
-    // Check if `base` was published directly on top of `theirs`.
-    if bm.parent.as_deref() == Some(tm.revision.as_str()) {
+    // Check if `base` was published directly on top of `theirs`, or took the drive from `theirs`
+    // and has published since (the mirror of `took_over_from_base` below).
+    let base_took_over_from_theirs = bm
+        .last_handover
+        .as_ref()
+        .is_some_and(|h| h.by == bm.driver && h.from_revision == tm.revision);
+    if bm.parent.as_deref() == Some(tm.revision.as_str()) || base_took_over_from_theirs {
         return Classification::TheirsBehind;
     }
 
