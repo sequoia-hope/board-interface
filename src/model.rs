@@ -297,7 +297,10 @@ pub struct Handover {
 pub struct Manifest {
     pub schema: u32,
     pub board: String,
+    /// Derived by [`crate::revision()`] from `geometry_hash`, `driver`, `parent` and
+    /// `last_handover`. Set it with [`crate::seal`]; never set it to the geometry hash.
     pub revision: String,
+    /// The revision this one was published on top of, or `None` for the first.
     pub parent: Option<String>,
     pub author: Author,
     pub driver: Driver,

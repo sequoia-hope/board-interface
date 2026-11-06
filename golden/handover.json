@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "board": "easy2350",
+  "revision": "rev:sha256:366bebdea751200d6eb75ac656b45ce0520b377eec29d05456897a2c1e8a9e92",
+  "parent": "rev:sha256:ac3cb8c7cc3daf7ed8eb2a2f5ba63764dcdd9b3809e685cd74aed071798a4343",
+  "author": {
+    "app": "waffle",
+    "source": "2222222222222222222222222222222222222222",
+    "at": "2026-11-05T12:00:00Z"
+  },
+  "driver": "waffle",
+  "last_handover": {
+    "by": "waffle",
+    "at": "2026-11-05T12:00:00Z",
+    "from_revision": "rev:sha256:ac3cb8c7cc3daf7ed8eb2a2f5ba63764dcdd9b3809e685cd74aed071798a4343"
+  },
+  "thickness_mm": 1.6,
+  "geometry_hash": "sha256:d46bc4bcff1ed485d79e6a47a8a521c1c193ee21a64e6d6ec811e0dd253a0088",
+  "approximate": false
+}

@@ -24,6 +24,32 @@ SOURCE_COMMIT = "56d2bd8fcb94ff5f1137e66a203efa30dc7c91e4"
 PUBLISHED_AT = "2026-11-02T23:58:12Z"
 
 
+def derive_revision(manifest: dict) -> str:
+    """board-interface's `revision()`, written out independently (see src/revision.rs)."""
+
+    def put_str(h, v: str) -> None:
+        b = v.encode("utf-8")
+        h.update(struct.pack(">Q", len(b)))
+        h.update(b)
+
+    h = hashlib.sha256(b"board-interface:revision:v1\0")
+    put_str(h, manifest["geometry_hash"])
+    put_str(h, manifest["driver"])
+    if manifest["parent"] is None:
+        h.update(b"\0")
+    else:
+        h.update(b"\1")
+        put_str(h, manifest["parent"])
+    handover = manifest["last_handover"]
+    if handover is None:
+        h.update(b"\0")
+    else:
+        h.update(b"\1")
+        for key in ("by", "at", "from_revision"):
+            put_str(h, handover[key])
+    return "rev:sha256:" + h.hexdigest()
+
+
 def tokenize_sexpr(text: str) -> list[str]:
     tokens: list[str] = []
     i = 0
@@ -398,7 +424,7 @@ def main() -> None:
     manifest = {
         "schema": 1,
         "board": "easy2350",
-        "revision": geom_hash,
+        "revision": "",
         "parent": None,
         "author": {
             "app": "kicad",
@@ -411,6 +437,7 @@ def main() -> None:
         "geometry_hash": geom_hash,
         "approximate": False,
     }
+    manifest["revision"] = derive_revision(manifest)
     manifest_text = json.dumps(manifest, indent=2) + "\n"
 
     args.out_dir.mkdir(parents=True, exist_ok=True)

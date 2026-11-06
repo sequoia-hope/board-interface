@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "board": "easy2350",
-  "revision": "sha256:d46bc4bcff1ed485d79e6a47a8a521c1c193ee21a64e6d6ec811e0dd253a0088",
+  "revision": "rev:sha256:ac3cb8c7cc3daf7ed8eb2a2f5ba63764dcdd9b3809e685cd74aed071798a4343",
   "parent": null,
   "author": {
     "app": "kicad",

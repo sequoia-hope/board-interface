@@ -11,6 +11,11 @@ Y up, `BOARD_INTERFACE` extended data) and `<name>.json` (`board-shape.json`, sc
 | `round_board.{dxf,json}` | Circular 50 mm diameter board (`BOARD_OUTLINE` `CIRCLE`), one circular 12 mm inner cutout (`BOARD_CUTOUT` `CIRCLE`), four M2.5 mounting holes (`2.7 mm` drill, two plated with `0.25 mm` clearance, two non-plated with `0.3 mm` clearance), and one circular `back`-side keepout (`2.5 mm` height limit). | Built in `tests/integration.rs` (`build_round_board`) and emitted via `board_interface::write` (`UPDATE_GOLDEN=1 cargo test`). |
 | `rounded_rect.{dxf,json}` | `80 × 50 mm` board with four `4 mm`-radius `ARC` corners and four `LINE` edges on `BOARD_OUTLINE`, one `10 × 6 mm` rectangular `BOARD_CUTOUT`, two `3.2 mm` mounting holes on `BOARD_HOLE`, and one rectangular `front`-side `BOARD_KEEPOUT` (`height = 0`, no components). | Built in `tests/integration.rs` (`build_rounded_rect`) and emitted via `board_interface::write` (`UPDATE_GOLDEN=1 cargo test`). |
 | `easy2350.{dxf,json}` | `21 × 51 mm` RP2350 board (`[100, 121] × [100, 151] mm` in KiCad sheet coordinates, `1.6 mm` thickness) with four `LINE` edges and four `1 mm`-radius `ARC` corner fillets, carrying `kicad:<tstamp>` element IDs. Canonical hash: `sha256:d46bc4bcff1ed485d79e6a47a8a521c1c193ee21a64e6d6ec811e0dd253a0088`. | Converted from the `Edge.Cuts` layer of `easy2350.kicad_pcb` by `python3 tools/convert_easy2350.py` (see provenance below) and verified byte-for-byte against `board_interface::write`. |
+| `handover.{dxf,json}` | easy2350's geometry, taken over by Waffle Iron with no edits: `parent` and `last_handover.from_revision` name easy2350's revision, `geometry_hash` is unchanged, and `revision` differs from `parent`. | Built in `tests/integration.rs` (`build_zero_edit_handover`) and emitted via `board_interface::write` (`UPDATE_GOLDEN=1 cargo test`). |
+
+Every valid fixture's `revision` is `board_interface::revision` of its manifest. `easy2350.json`'s is
+computed by an independent Python implementation in `tools/convert_easy2350.py`, so the two agree on
+the encoding.
 
 ### Provenance of `easy2350`
 

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "board": "rounded_carrier",
-  "revision": "sha256:017c745a3d6cb0f5550a5505ae64a32cf4d211e05515ab5791b2d689c1c55d70",
+  "revision": "rev:sha256:12b5952dfe1bec730f0840b50d5946638fff5ec9f8c987335cbb7fa237a17d42",
   "parent": null,
   "author": {
     "app": "composer",

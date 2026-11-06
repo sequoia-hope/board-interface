@@ -13,11 +13,16 @@ Coordinates in memory are `i64` whole nanometres (`1 mm = 1_000_000 nm`) in KiCa
 (`+X` right, `+Y` down):
 
 ```rust
-use board_interface::{read, write, hash, compare, within};
+use board_interface::{read, write, hash, seal, compare, within};
 
 let record = read(dxf_bytes, manifest_bytes)?;
 let digest = hash(&record);              // "sha256:..."
-let (dxf_out, json_out) = write(&record);
+
+// Publishing: set driver, parent and last_handover, then seal, then write.
+let mut next = record.clone();
+next.manifest.parent = Some(record.manifest.revision.clone());
+seal(&mut next);                         // geometry_hash, then revision "rev:sha256:..."
+let (dxf_out, json_out) = write(&next);
 
 if !within(&previous, &record, 1) {
     let diff = compare(&previous, &record);
@@ -61,6 +66,13 @@ extended data leaves IDs as `None` (welding loop corners within `100 nm`), and c
   `"sha256:<hex>"`.
 - `within(a, b, tolerance_nm)` checks whether two records agree within `tolerance_nm` so sub-nm or
   1 nm rounding noise does not republish a board.
+- `revision(&manifest)` derives a manifest's `revision` from its `geometry_hash`, `driver`,
+  `parent` and `last_handover`, returning `"rev:sha256:<hex>"`. Every app must use it (or the
+  encoding documented on it), so all of them compute the same string. Hashing the parent in means a
+  revision always differs from its parent, even for a take over with no edits, and restoring an
+  earlier shape does not repeat an earlier revision. `seal(&mut record)` sets `geometry_hash` and
+  then `revision`; call it last before `write`. `compare` treats revisions as opaque, so files
+  written by `0.1.0`, whose revision was the geometry hash, still compare.
 - `compare(base, theirs)` reports per-ID `Added`, `Removed`, `Moved { dx_nm, dy_nm }` and `Changed`
   items (or geometrically re-matches stripped files and flags ambiguous candidates in `uncertain`),
   and classifies handover state into `InSync`, `UpdatedByDriver`, `TheirsBehind`, `CleanHandover`,

@@ -5,8 +5,9 @@
 //! - `board-shape.dxf`: DXF R12 (`AC1009`), millimetres, **Y up**, layers `BOARD_OUTLINE`,
 //!   `BOARD_CUTOUT`, `BOARD_HOLE`, `BOARD_KEEPOUT`, with extended entity data under
 //!   `BOARD_INTERFACE` registered in an `APPID` table.
-//! - `board-shape.json`: schema, board name, revision, parent, author, driver, handover record,
-//!   board thickness, canonical nanometre geometry hash, and `approximate` flag.
+//! - `board-shape.json`: schema, board name, revision (derived by [`revision()`]), parent,
+//!   author, driver, handover record, board thickness, canonical nanometre geometry hash, and
+//!   `approximate` flag.
 //!
 //! All coordinates and diameters in [`Record`] are whole nanometres (`i64`) in KiCad's board frame
 //! (`+X` right, `+Y` down). The crate performs no I/O, reads no system clock, uses no `HashMap`
@@ -18,6 +19,7 @@ mod dxf_write;
 pub mod error;
 pub mod hash;
 pub mod model;
+pub mod revision;
 
 pub use compare::{
     Change, ChangeKind, Classification, Comparison, RematchedId, Role, UncertainMatch, compare,
@@ -32,6 +34,7 @@ pub use model::{
     LAYER_HOLE, LAYER_KEEPOUT, LAYER_OUTLINE, Loop, Manifest, NM_PER_MM, Point, Record,
     SCHEMA_VERSION, Side,
 };
+pub use revision::{REVISION_PREFIX, revision, seal};
 
 #[cfg(test)]
 mod unit_tests {

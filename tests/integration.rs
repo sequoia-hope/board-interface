@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use board_interface::{
     Author, Change, ChangeKind, Classification, Driver, Element, ElementKind, Error, Handover,
     Hole, Keepout, LAYER_CUTOUT, LAYER_HOLE, LAYER_KEEPOUT, LAYER_OUTLINE, Loop, Manifest,
-    NM_PER_MM, Point, Record, Role, SCHEMA_VERSION, Side, compare, hash, read, within, write,
+    NM_PER_MM, Point, REVISION_PREFIX, Record, Role, SCHEMA_VERSION, Side, compare, hash, read,
+    revision, seal, within, write,
 };
 
 fn golden_dir() -> PathBuf {
@@ -45,11 +46,7 @@ fn make_manifest(board: &str, driver: Driver, thickness_mm: f64) -> Manifest {
 }
 
 fn finalize_record(mut record: Record) -> Record {
-    let h = hash(&record);
-    record.manifest.geometry_hash = h.clone();
-    if record.manifest.revision.is_empty() {
-        record.manifest.revision = h;
-    }
+    seal(&mut record);
     record
 }
 
@@ -310,6 +307,152 @@ fn golden_valid_boards_round_trip_byte_for_byte_and_preserve_record_and_hash() {
     assert_eq!(rewritten_json.as_bytes(), easy_json.as_slice());
     let easy_back = read(&rewritten_dxf, &rewritten_json).expect("re-read easy2350");
     assert_eq!(easy_back, easy);
+
+    // The handover golden: easy2350 taken over by Waffle Iron with no edits.
+    let taken = build_zero_edit_handover(&easy, Driver::Waffle);
+    let (taken_dxf, taken_json) = write(&taken);
+    check_or_update_golden_bytes("handover.dxf", taken_dxf.as_bytes());
+    check_or_update_golden_bytes("handover.json", taken_json.as_bytes());
+    let taken_back = read(&taken_dxf, &taken_json).expect("read handover");
+    assert_eq!(taken_back, taken);
+
+    // Every valid golden carries the derived revision, so both apps can check their derivation
+    // against these files.
+    for rec in [&round, &rect, &easy, &taken] {
+        assert_eq!(rec.manifest.revision, revision(&rec.manifest));
+        assert!(rec.manifest.revision.starts_with(REVISION_PREFIX));
+    }
+}
+
+/// A take over of `from` by `by`, publishing the same geometry.
+fn build_zero_edit_handover(from: &Record, by: Driver) -> Record {
+    let at = "2026-11-05T12:00:00Z".to_string();
+    let mut r = from.clone();
+    r.manifest.parent = Some(from.manifest.revision.clone());
+    r.manifest.driver = by;
+    r.manifest.author = Author {
+        app: by,
+        source: "2222222222222222222222222222222222222222".to_string(),
+        at: at.clone(),
+    };
+    r.manifest.last_handover = Some(Handover {
+        by,
+        at,
+        from_revision: from.manifest.revision.clone(),
+    });
+    seal(&mut r);
+    r
+}
+
+/// sequoia-hope/board-interface#1: a take over with no edits used to leave `revision == parent`,
+/// so what followed it was misclassified.
+#[test]
+fn zero_edit_handover_then_edit_or_take_back_classifies_correctly() {
+    let easy_dxf = std::fs::read(golden_dir().join("easy2350.dxf")).unwrap();
+    let easy_json = std::fs::read(golden_dir().join("easy2350.json")).unwrap();
+    let r1 = read(&easy_dxf, &easy_json).unwrap();
+
+    // R1 -> R2: Waffle Iron takes over with no edits. Same geometry, new revision.
+    let r2 = build_zero_edit_handover(&r1, Driver::Waffle);
+    assert_eq!(r2.manifest.geometry_hash, r1.manifest.geometry_hash);
+    assert_ne!(r2.manifest.revision, r1.manifest.revision);
+    assert_eq!(
+        compare(&r1, &r2).classification,
+        Classification::CleanHandover
+    );
+    assert_eq!(
+        compare(&r2, &r1).classification,
+        Classification::TheirsBehind
+    );
+
+    // R2 -> R3: the new driver then edits.
+    let mut r3 = r2.clone();
+    r3.manifest.parent = Some(r2.manifest.revision.clone());
+    r3.manifest.author.at = "2026-11-05T12:05:00Z".to_string();
+    r3.holes.push(Hole {
+        id: Some("waffle:h1".to_string()),
+        center: Point::new(105 * NM_PER_MM, 105 * NM_PER_MM),
+        diameter_nm: 2_200_000,
+        plated: false,
+        clearance_nm: 0,
+    });
+    seal(&mut r3);
+    assert_eq!(
+        compare(&r2, &r3).classification,
+        Classification::UpdatedByDriver
+    );
+    // A follower still at R1 sees the handover it missed.
+    assert_eq!(
+        compare(&r1, &r3).classification,
+        Classification::CleanHandover
+    );
+
+    // R2 -> R4: the old driver takes back with no edits.
+    let r4 = build_zero_edit_handover(&r2, r1.manifest.driver);
+    assert_eq!(r4.manifest.driver, r1.manifest.driver);
+    assert_eq!(r4.manifest.geometry_hash, r1.manifest.geometry_hash);
+    assert_ne!(r4.manifest.revision, r1.manifest.revision);
+    assert_eq!(
+        compare(&r2, &r4).classification,
+        Classification::CleanHandover
+    );
+
+    // Had the new driver already published R3, taking back from R2 is stale.
+    assert_eq!(
+        compare(&r3, &r4).classification,
+        Classification::StaleTakeOver
+    );
+    assert_eq!(
+        compare(&r4, &r3).classification,
+        Classification::StaleTakeOver
+    );
+
+    // Restoring an earlier shape does not repeat an earlier revision.
+    let mut r5 = r3.clone();
+    r5.manifest.parent = Some(r3.manifest.revision.clone());
+    r5.holes.pop();
+    seal(&mut r5);
+    assert_eq!(r5.manifest.geometry_hash, r2.manifest.geometry_hash);
+    assert_ne!(r5.manifest.revision, r2.manifest.revision);
+    assert_eq!(
+        compare(&r3, &r5).classification,
+        Classification::UpdatedByDriver
+    );
+}
+
+#[test]
+fn revision_commits_to_every_field_it_names_and_nothing_else() {
+    let easy_dxf = std::fs::read(golden_dir().join("easy2350.dxf")).unwrap();
+    let easy_json = std::fs::read(golden_dir().join("easy2350.json")).unwrap();
+    let base =
+        build_zero_edit_handover(&read(&easy_dxf, &easy_json).unwrap(), Driver::Waffle).manifest;
+    let r = revision(&base);
+
+    let mut m = base.clone();
+    m.geometry_hash.push('0');
+    assert_ne!(revision(&m), r);
+    let mut m = base.clone();
+    m.driver = Driver::Kicad;
+    assert_ne!(revision(&m), r);
+    let mut m = base.clone();
+    m.parent = None;
+    assert_ne!(revision(&m), r);
+    let mut m = base.clone();
+    m.last_handover = None;
+    assert_ne!(revision(&m), r);
+    let mut m = base.clone();
+    m.last_handover.as_mut().unwrap().at.push('Z');
+    assert_ne!(revision(&m), r);
+    let mut m = base.clone();
+    m.last_handover.as_mut().unwrap().from_revision.push('0');
+    assert_ne!(revision(&m), r);
+
+    // Provenance is not part of the revision.
+    let mut m = base.clone();
+    m.author.at = "2030-01-01T00:00:00Z".to_string();
+    m.author.source = "elsewhere".to_string();
+    m.revision = "ignored".to_string();
+    assert_eq!(revision(&m), r);
 }
 
 #[test]
@@ -1014,7 +1157,8 @@ fn compare_classifies_every_handover_state_and_diffs_per_id() {
     // the newest manifest's parent no longer names the follower's revision. Still a clean handover.
     let mut r4_waffle = r3_waffle.clone();
     r4_waffle.manifest.parent = Some(r3_waffle.manifest.revision.clone());
-    r4_waffle.manifest.revision = "after-the-handover".to_string();
+    r4_waffle.holes[0].center.y += NM_PER_MM;
+    let r4_waffle = finalize_record(r4_waffle);
     assert_eq!(
         compare(&r2, &r4_waffle).classification,
         Classification::CleanHandover,
